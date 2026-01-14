@@ -9,12 +9,12 @@ import (
 )
 
 type Message struct {
-	ID        uint64    `gorm:"primaryKey;autoIncrement"`
-	CreatedAt time.Time `gorm:"not null;autoCreateTime"`
+	ID        uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
+	CreatedAt time.Time `gorm:"not null;autoCreateTime" json:"createdAt"`
 
-	ConnID uuid.UUID `gorm:"not null"`
-	User   string    `gorm:"not null"`
-	Text   string    `gorm:"not null"`
+	ConnID uuid.UUID `gorm:"not null" json:"connId"`
+	User   string    `gorm:"not null" json:"user"`
+	Text   string    `gorm:"not null" json:"text"`
 }
 
 func (r *Message) MarshalZerologObject(e *zerolog.Event) {

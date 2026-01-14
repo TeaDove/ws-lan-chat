@@ -33,7 +33,7 @@ func (r *Repo) ListMessages(ctx context.Context, age time.Duration, limit int) (
 	msgs, err := gorm.G[Message](r.db).
 		Where("created_at > ?", time.Now().Add(-age)).
 		Limit(limit).
-		Order("created_at desc").
+		Order("created_at asc").
 		Find(ctx)
 
 	if err != nil {

@@ -3,7 +3,7 @@ services:
     restart: always
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: DockerfileBackend
     ports:
       - "8080:8080"
     volumes:

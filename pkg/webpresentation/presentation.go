@@ -2,7 +2,9 @@ package webpresentation
 
 import (
 	"context"
+	"github.com/pkg/errors"
 	"strings"
+	"sync"
 	"ws-lan-chat/pkg/chatservice"
 
 	"github.com/gofiber/contrib/websocket"
@@ -48,7 +50,7 @@ func (r *Presentation) BuildApp() *fiber.App {
 		ctx = logger_utils.WithValue(ctx, "app_method", "/ws")
 		ctx = logger_utils.WithValue(ctx, "user_agent", strings.Clone(c.Headers(fiber.HeaderUserAgent)))
 
-		user := c.Headers("User", "anonimus")
+		user := c.Query("user", "anonimus")
 		ctx = logger_utils.WithValue(ctx, "user", user)
 
 		connID := uuid.New()
@@ -60,46 +62,68 @@ func (r *Presentation) BuildApp() *fiber.App {
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
-		type ErrorMsg struct {
-			Err string `json:"err"`
-		}
-
-		go func() {
-			for {
-				var msgRequest chatservice.MsgRequest
-				err := c.ReadJSON(&msgRequest)
-				if err != nil {
-					zerolog.Ctx(ctx).Warn().Err(err).Msg("failed.to.read.message.from.client")
-					innerErr := c.WriteJSON(ErrorMsg{err.Error()})
-					if innerErr != nil {
-						return
-					}
-
-					continue
-				}
-
-				err = r.chatService.SaveMessage(ctx, user, connID, &msgRequest)
-				if err != nil {
-					zerolog.Ctx(ctx).Error().Stack().Err(err).Msg("failed.to.save.message.from.client")
-				}
-			}
-		}()
-
-		defer r.chatService.Unsubscribe(connID)
-		msgs, err := r.chatService.Subscribe(ctx, connID)
-		if err != nil {
-			_ = c.WriteJSON(ErrorMsg{err.Error()})
-			return
-		}
-
-		for msg := range msgs {
-			err = c.WriteJSON(msg)
+		var wg sync.WaitGroup
+		wg.Go(func() {
+			err := r.publish(ctx, c, user, connID)
 			if err != nil {
-				zerolog.Ctx(ctx).Error().Stack().Err(err).Msg("failed.to.write.msg.to.client")
-				return
+				closeOnErr(ctx, c, err)
 			}
-		}
+		})
+		wg.Go(func() {
+			err := r.subscribe(ctx, c, connID)
+			if err != nil {
+				closeOnErr(ctx, c, err)
+			}
+		})
+
+		wg.Wait()
 	}))
 
 	return app
+}
+
+func closeOnErr(ctx context.Context, c *websocket.Conn, err error) {
+	zerolog.Ctx(ctx).
+		Error().
+		Err(err).
+		Msg("failed.to.process.ws")
+	err = c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseInternalServerErr, err.Error()))
+	if err != nil {
+		zerolog.Ctx(ctx).
+			Error().
+			Err(err).
+			Msg("failed.to.close")
+	}
+}
+
+func (r *Presentation) publish(ctx context.Context, c *websocket.Conn, user string, connID uuid.UUID) error {
+	for {
+		var msgRequest chatservice.MsgRequest
+		err := c.ReadJSON(&msgRequest)
+		if err != nil {
+			return errors.Wrap(err, "read json")
+		}
+
+		err = r.chatService.SaveMessage(ctx, user, connID, &msgRequest)
+		if err != nil {
+			return errors.Wrap(err, "save message")
+		}
+	}
+}
+
+func (r *Presentation) subscribe(ctx context.Context, c *websocket.Conn, connID uuid.UUID) error {
+	defer r.chatService.Unsubscribe(connID)
+	msgs, err := r.chatService.Subscribe(ctx, connID)
+	if err != nil {
+		return errors.Wrap(err, "subscribe")
+	}
+
+	for msg := range msgs {
+		err = c.WriteJSON(msg)
+		if err != nil {
+			return errors.Wrap(err, "write json to client")
+		}
+	}
+
+	return nil
 }
