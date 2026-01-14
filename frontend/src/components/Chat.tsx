@@ -46,7 +46,9 @@ export default function Chat() {
       wsRef.current = null
     }
 
-    const ws = new WebSocket(`ws://localhost:8080/ws?user=${encodeURIComponent(username)}`)
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const wsUrl = `${protocol}//${window.location.host}/ws?user=${encodeURIComponent(username)}`
+    const ws = new WebSocket(wsUrl)
     
     ws.onopen = () => {
       setIsConnected(true)

@@ -1,11 +1,18 @@
 services:
-  neko-manager:
+  backend:
     restart: always
     build:
       context: .
       dockerfile: DockerfileBackend
-    ports:
-      - "8080:8080"
     volumes:
       - ".data:/.data"
-      - ".env:/.env"
+
+  frontend:
+    restart: always
+    build:
+      context: .
+      dockerfile: DockerfileFrontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
