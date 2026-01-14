@@ -1,0 +1,9 @@
+.data
+.git
+.env
+bootstrap
+.pre-commit-config.yaml
+.golangci.yml
+docker-compose.yaml
+Makefile
+README.md
